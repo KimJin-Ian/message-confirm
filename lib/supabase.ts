@@ -6,14 +6,20 @@ const SUPABASE_URL =
 
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 
-if (!SUPABASE_ANON_KEY && typeof window !== "undefined") {
-  // 클라이언트에서 anon key 없으면 명확히 알려주기
+// 빌드 시점에는 키가 없어도 createClient가 throw 하지 않도록 placeholder 사용.
+// 런타임에 실제 키 없으면 API 호출이 실패하고 컴포넌트의 try/catch가 에러 UI 표시.
+const KEY_FOR_CLIENT =
+  SUPABASE_ANON_KEY || "build-time-placeholder-no-real-requests-will-succeed";
+
+export const hasSupabaseKey = SUPABASE_ANON_KEY.length > 0;
+
+if (!hasSupabaseKey && typeof window !== "undefined") {
   console.warn(
     "[supabase] NEXT_PUBLIC_SUPABASE_ANON_KEY 환경변수가 설정되지 않았습니다. .env.local 또는 Vercel 설정을 확인하세요."
   );
 }
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+export const supabase = createClient(SUPABASE_URL, KEY_FOR_CLIENT, {
   auth: { persistSession: false }, // 로그인 안 씀
   realtime: { params: { eventsPerSecond: 10 } },
 });

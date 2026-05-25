@@ -8,7 +8,7 @@ import {
   subscribeToMessages,
   type KpiCounts,
 } from "@/lib/api";
-import type { Message } from "@/lib/supabase";
+import { hasSupabaseKey, type Message } from "@/lib/supabase";
 
 type Props = {
   onSelectMessage: (messageId: string) => void;
@@ -86,7 +86,31 @@ export default function HomeScreen({ onSelectMessage }: Props) {
         </div>
       </div>
 
-      {error && (
+      {!hasSupabaseKey && (
+        <div
+          style={{
+            background: "var(--orange-50)",
+            border: "1px solid var(--orange-600)",
+            color: "var(--orange-600)",
+            padding: "14px 18px",
+            borderRadius: 8,
+            marginBottom: 16,
+            fontSize: 13,
+            lineHeight: 1.6,
+          }}
+        >
+          <b>⚠ Supabase 환경변수가 등록되지 않았습니다.</b>
+          <div style={{ fontSize: 11.5, color: "var(--text-700)", marginTop: 6 }}>
+            Vercel → Settings → Environment Variables 에 두 개 추가:
+            <ul style={{ margin: "6px 0 0 18px", padding: 0 }}>
+              <li><code>NEXT_PUBLIC_SUPABASE_URL</code></li>
+              <li><code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code></li>
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {error && hasSupabaseKey && (
         <div
           style={{
             background: "var(--red-50)",
@@ -99,9 +123,6 @@ export default function HomeScreen({ onSelectMessage }: Props) {
           }}
         >
           ⚠ {error}
-          <div style={{ fontSize: 11, color: "var(--text-500)", marginTop: 4 }}>
-            .env.local 또는 Vercel 환경변수에 NEXT_PUBLIC_SUPABASE_ANON_KEY가 설정됐는지 확인하세요.
-          </div>
         </div>
       )}
 
