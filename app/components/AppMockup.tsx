@@ -20,10 +20,18 @@ const REVIEW_STATUSES = new Set<Message["status"]>([
   "feedback",
 ]);
 
+const SCREEN_LABEL: Record<Screen, string> = {
+  home: "대시보드 홈",
+  review: "검토 화면",
+  fixed: "픽스 모음집",
+  excluded: "제외 케이스",
+};
+
 export default function AppMockup() {
   const [screen, setScreen] = useState<Screen>("home");
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [navOpen, setNavOpen] = useState(false);
 
   // ───── 데이터 로드 ─────
   const reload = useCallback(async () => {
@@ -41,9 +49,8 @@ export default function AppMockup() {
     try {
       unsub = subscribeToMessages(reload);
     } catch (e) {
-      console.warn("[Realtime] 구독 실패 — 환경변수/Realtime 설정 확인", e);
+      console.warn("[Realtime] 구독 실패", e);
     }
-    // 백업 폴링: Realtime이 안 되거나 누락된 변경 잡기 위해 8초마다
     const poll = setInterval(reload, 8000);
     return () => {
       if (unsub) unsub();
@@ -51,7 +58,36 @@ export default function AppMockup() {
     };
   }, [reload]);
 
-  // ───── KPI 카운트 (사이드바 배지용) ─────
+  // 모바일 nav 열렸을 때 body scroll lock
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (navOpen) document.body.classList.add("nav-open");
+    else document.body.classList.remove("nav-open");
+    return () => document.body.classList.remove("nav-open");
+  }, [navOpen]);
+
+  // ESC로 nav 닫기
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setNavOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navOpen]);
+
+  // 데스크탑 사이즈로 resize되면 nav 자동 닫기
+  useEffect(() => {
+    const onResize = () => {
+      if (typeof window !== "undefined" && window.innerWidth > 980 && navOpen) {
+        setNavOpen(false);
+      }
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [navOpen]);
+
+  // KPI 카운트
   const counts = useMemo(() => {
     const c = {
       total: 0,
@@ -70,7 +106,7 @@ export default function AppMockup() {
     return c;
   }, [messages]);
 
-  // ───── 검토 큐 (rank 오름차순) ─────
+  // 검토 큐 (rank ASC)
   const reviewQueue = useMemo(
     () =>
       messages
@@ -85,17 +121,14 @@ export default function AppMockup() {
     : -1;
   const queueLen = reviewQueue.length;
 
-  // ───── 네비게이션 ─────
   const goReview = useCallback(
     (messageId?: string) => {
       let target = messageId;
-      if (!target) {
-        // messageId가 없으면 큐의 첫 항목 자동 선택
-        target = reviewQueue[0];
-      }
+      if (!target) target = reviewQueue[0];
       if (target) setSelectedMessageId(target);
       setScreen("review");
-      reload(); // 진입 시 한 번 더 fresh
+      setNavOpen(false);
+      reload();
     },
     [reviewQueue, reload]
   );
@@ -104,7 +137,6 @@ export default function AppMockup() {
     if (currentIdx >= 0 && currentIdx < queueLen - 1) {
       setSelectedMessageId(reviewQueue[currentIdx + 1]);
     } else if (currentIdx === -1 && queueLen > 0) {
-      // 현재 메시지가 큐 밖(이미 픽스/제외)이면 첫 항목으로
       setSelectedMessageId(reviewQueue[0]);
     }
   }, [currentIdx, queueLen, reviewQueue]);
@@ -115,22 +147,18 @@ export default function AppMockup() {
     }
   }, [currentIdx, reviewQueue]);
 
-  // 현재 선택한 메시지가 처리되어 큐에서 빠지면, 같은 인덱스의 다음 메시지로 자동 이동
   useEffect(() => {
     if (screen !== "review") return;
     if (!selectedMessageId) return;
-    const stillInQueue = reviewQueue.includes(selectedMessageId);
-    if (stillInQueue) return;
-    // 큐 밖 — 처리됨. 큐의 같은 위치 또는 마지막으로
+    if (reviewQueue.includes(selectedMessageId)) return;
     if (reviewQueue.length === 0) return;
-    // 그냥 첫 항목으로 (가장 우선순위 높은 것)
     setSelectedMessageId(reviewQueue[0]);
   }, [reviewQueue, selectedMessageId, screen]);
 
-  // 화면 전환 시 데이터 fresh
   const navigate = useCallback(
     (next: Screen) => {
       setScreen(next);
+      setNavOpen(false);
       reload();
     },
     [reload]
@@ -138,6 +166,37 @@ export default function AppMockup() {
 
   return (
     <NameProvider>
+      {/* 모바일 상단 바 — 햄버거 + 현재 화면 + 라이브닷 */}
+      <div className="mobile-topbar">
+        <button
+          type="button"
+          className={`menu-toggle ${navOpen ? "open" : ""}`}
+          aria-label={navOpen ? "메뉴 닫기" : "메뉴 열기"}
+          aria-expanded={navOpen}
+          onClick={() => setNavOpen((v) => !v)}
+        >
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        <div className="mobile-title">
+          <div className="logo-mini">M</div>
+          <div className="text">
+            <div className="brand-line">메시지 컨펌</div>
+            <div className="screen-line">{SCREEN_LABEL[screen]}</div>
+          </div>
+        </div>
+        <div className="mobile-livedot" title="OPEN LINK · 누구나 접근">
+          <span className="dot" />
+        </div>
+      </div>
+
+      <div
+        className="nav-backdrop"
+        onClick={() => setNavOpen(false)}
+        aria-hidden={!navOpen}
+      />
+
       <div className="app-wrapper">
         <Sidebar current={screen} onChange={navigate} counts={counts} />
         <main className="main">
