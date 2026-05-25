@@ -1,144 +1,225 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import NameSelector from "./NameSelector";
 import { useAuthor } from "./NameContext";
-
-type Comment = {
-  id: string;
-  author: string;
-  body: string;
-  meta: string;
-  fromKim?: boolean;
-};
-
-const INITIAL_V3 = `안녕하세요 선생님.
-위드에스마케팅 이서진입니다.
-
-2024년 3월쯤에 논문 문의 주셨던 분이시죠?
-그때 비용 부분에서 조금 고민되셨던 게 기억나서요.
-
-저희가 그때 이후로 분량·범위에 따라 패키지를 좀 더 세분화했거든요.
-"형틀만 잡아주는 초안" "구조 컨설팅만" 이런 식으로
-선생님 예산 안에서 진행하는 방법도 있어서요.
-
-논문 주제·현재 상황 한 줄만 알려주시면
-지금 가능한 옵션 정리해서 견적 드릴게요. 부담 없이요.
-
-▶ 카톡 채널: pf.kakao.com/_QkZhd`;
-
-const INITIAL_COMMENTS: Comment[] = [
-  {
-    id: "c1",
-    author: "이서진",
-    meta: "2시간 전 · v1에 코멘트",
-    body: '"풀 대필"이라는 표현은 빼주세요. 우리는 컨설팅 위주라 그런 단어 쓰면 안 돼요.',
-  },
-  {
-    id: "c2",
-    author: "김진",
-    meta: "1시간 30분 전 · v2 업로드",
-    body: '"풀 대필" 표현 제거, "형틀만 잡아주는 초안" / "구조 컨설팅만"으로 보완했습니다.',
-    fromKim: true,
-  },
-  {
-    id: "c3",
-    author: "이서진",
-    meta: "1시간 25분 전",
-    body: '좋아요. 근데 "예산 안에서"라는 표현이 가격 협상 같은 느낌. 좀 더 부드럽게 바꿔주세요.',
-  },
-  {
-    id: "c4",
-    author: "김진",
-    meta: "1시간 전 · v3 업로드",
-    body: '"예산 안에서" → "분량·범위에 따라 패키지 세분화" + "부담 없이요"로 톤 다운. 인용 본인이 한 말 ("형틀만") 정확히 반영.',
-    fromKim: true,
-  },
-];
+import {
+  fetchMessage,
+  fetchVersions,
+  fetchComments,
+  saveNewVersion,
+  postComment,
+  updateMessageStatus,
+  subscribeToMessage,
+} from "@/lib/api";
+import type { Message, MessageVersion, Comment } from "@/lib/supabase";
 
 const QUICK_FB = ["✏️ 톤 조정", "🚫 단어 빼기", "➕ 사례 추가", "📏 더 짧게"];
 
-export default function ReviewScreen() {
+type Props = {
+  messageId: string | null;
+  onBack: () => void;
+};
+
+export default function ReviewScreen({ messageId, onBack }: Props) {
   const { name } = useAuthor();
   const editorRef = useRef<HTMLDivElement>(null);
-  const [v3Text, setV3Text] = useState<string>(INITIAL_V3);
-  const [comments, setComments] = useState<Comment[]>(INITIAL_COMMENTS);
+
+  const [msg, setMsg] = useState<Message | null>(null);
+  const [versions, setVersions] = useState<MessageVersion[]>([]);
+  const [comments, setComments] = useState<Comment[]>([]);
   const [draftComment, setDraftComment] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Keep contentEditable in sync only on initial mount + on "원래대로"
-  useEffect(() => {
-    if (editorRef.current && editorRef.current.innerText !== v3Text) {
-      editorRef.current.innerText = v3Text;
+  const load = useCallback(async () => {
+    if (!messageId) return;
+    try {
+      const [m, vs, cs] = await Promise.all([
+        fetchMessage(messageId),
+        fetchVersions(messageId),
+        fetchComments(messageId),
+      ]);
+      setMsg(m);
+      setVersions(vs);
+      setComments(cs);
+      setError(null);
+    } catch (e: unknown) {
+      const m = e instanceof Error ? e.message : "데이터 로드 실패";
+      setError(m);
     }
-    // We intentionally do NOT depend on v3Text to avoid caret jumps while typing.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [messageId]);
 
-  const restoreV3 = () => {
-    setV3Text(INITIAL_V3);
-    if (editorRef.current) editorRef.current.innerText = INITIAL_V3;
-  };
+  // 최초 로드 + Realtime
+  useEffect(() => {
+    load();
+    if (!messageId) return;
+    return subscribeToMessage(messageId, load);
+  }, [messageId, load]);
 
-  const saveAsV4 = () => {
-    const current = editorRef.current?.innerText ?? v3Text;
-    setV3Text(current);
-    const displayName = name || "익명";
-    setComments((prev) => [
-      ...prev,
-      {
-        id: `c${prev.length + 1}`,
-        author: displayName,
-        meta: "방금 · v4 저장",
-        body: "v4로 직접 수정 저장됨.",
-        fromKim: displayName === "김진",
-      },
-    ]);
-  };
+  // contenteditable에 현재 버전 텍스트 초기 주입
+  useEffect(() => {
+    const current = versions[0];
+    if (current && editorRef.current && editorRef.current.innerText !== current.body_text) {
+      editorRef.current.innerText = current.body_text;
+    }
+  }, [versions]);
 
-  const sendComment = () => {
-    if (!draftComment.trim()) return;
-    const displayName = name || "익명";
-    setComments((prev) => [
-      ...prev,
-      {
-        id: `c${prev.length + 1}`,
-        author: displayName,
-        meta: "방금",
-        body: draftComment.trim(),
-        fromKim: displayName === "김진",
-      },
-    ]);
-    setDraftComment("");
-  };
-
-  const appendQuick = (text: string) => {
-    setDraftComment((prev) =>
-      prev ? `${prev}\n${text}` : text
+  if (!messageId) {
+    return (
+      <div className="screen active" id="screen-review">
+        <div className="page-head">
+          <div>
+            <h2>검토 화면</h2>
+            <div className="sub">
+              홈 대시보드에서 메시지를 선택해주세요.
+            </div>
+          </div>
+          <div className="actions">
+            <button className="btn" type="button" onClick={onBack}>
+              ← 홈으로
+            </button>
+          </div>
+        </div>
+        <div
+          style={{
+            background: "white",
+            border: "1px dashed var(--line)",
+            borderRadius: 12,
+            padding: 60,
+            textAlign: "center",
+            color: "var(--text-500)",
+          }}
+        >
+          <div style={{ fontSize: 36, marginBottom: 12 }}>📭</div>
+          선택된 메시지가 없습니다.
+          <br />
+          <button
+            className="btn primary"
+            type="button"
+            style={{ marginTop: 16 }}
+            onClick={onBack}
+          >
+            → 홈에서 우선 처리 목록 보기
+          </button>
+        </div>
+      </div>
     );
+  }
+
+  if (!msg) {
+    return (
+      <div className="screen active" id="screen-review">
+        <div className="page-head">
+          <div>
+            <h2>로딩 중...</h2>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const currentVersion = versions[0];
+
+  const saveCurrent = async () => {
+    const text = editorRef.current?.innerText ?? "";
+    if (!text.trim()) return;
+    if (currentVersion && text === currentVersion.body_text) {
+      setError("내용이 동일해서 새 버전으로 저장하지 않았습니다.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await saveNewVersion(msg.id, text, name || null);
+      setError(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "저장 실패");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const restoreOriginal = () => {
+    if (currentVersion && editorRef.current) {
+      editorRef.current.innerText = currentVersion.body_text;
+    }
+  };
+
+  const sendComment = async () => {
+    if (!draftComment.trim()) return;
+    setBusy(true);
+    try {
+      await postComment(
+        msg.id,
+        draftComment.trim(),
+        name || null,
+        currentVersion?.version_num ?? null
+      );
+      setDraftComment("");
+      setError(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "코멘트 저장 실패");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const decide = async (next: "fixed" | "excluded" | "feedback") => {
+    setBusy(true);
+    try {
+      await updateMessageStatus(msg.id, next);
+      setError(null);
+      if (next === "fixed" || next === "excluded") {
+        onBack();
+      } else {
+        await load();
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "상태 변경 실패");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
     <div className="screen active" id="screen-review">
       <div className="page-head">
         <div>
-          <h2>검토 화면 — 1703 (논문 · 가격저항)</h2>
+          <h2>
+            검토 화면 — {msg.tail4} ({msg.field})
+          </h2>
           <div className="sub">
-            v3 · 김진 1시간 전 업로드 · 현재 검토 대기
+            Rank {msg.rank} · 총점 {msg.total_score} · 시기 {msg.period} · 본문 {msg.body_len}자 · 현재 v{msg.current_version}
           </div>
         </div>
         <div className="actions">
           <NameSelector />
-          <button className="btn" type="button">
-            ← 이전
-          </button>
-          <button className="btn" type="button">
-            다음 →
+          <button className="btn" type="button" onClick={onBack}>
+            ← 홈
           </button>
         </div>
       </div>
 
+      {error && (
+        <div
+          style={{
+            background: "var(--red-50)",
+            border: "1px solid var(--red-600)",
+            color: "var(--red-600)",
+            padding: "10px 14px",
+            borderRadius: 8,
+            marginBottom: 12,
+            fontSize: 12.5,
+          }}
+        >
+          ⚠ {error}
+        </div>
+      )}
+
       <div className="compare-view">
-        {/* LEFT: 원문 */}
+        {/* 원문 */}
         <div className="compare-col">
           <div className="col-head">
             <span>📜 원문 (Raw) · 변경 불가</span>
@@ -147,130 +228,121 @@ export default function ReviewScreen() {
           <div className="col-body">
             <div className="raw-meta">
               <b>끝4자리</b>
-              <span>1703</span>
+              <span>{msg.tail4}</span>
+              <b>이름</b>
+              <span>{msg.name_guess || "선생님"}</span>
               <b>분야</b>
-              <span>논문 · 가격저항</span>
-              <b>점수</b>
-              <span>100점 (1순위)</span>
-              <b>시점</b>
-              <span>2024년 3월쯤</span>
+              <span>{msg.field}</span>
+              <b>총점</b>
+              <span>{msg.total_score} (재{msg.recency_score}/풍{msg.richness_score}/가{msg.potential_score})</span>
+              <b>시기</b>
+              <span>{msg.period}</span>
+              <b>본문 길이</b>
+              <span>{msg.body_len}자</span>
               <b>원본 파일</b>
-              <span style={{ fontSize: "10px", wordBreak: "break-all" }}>
-                (2달)24_03_10-24.04.31...
-              </span>
+              <span style={{ fontSize: 10, wordBreak: "break-all" }}>{msg.source_file}</span>
             </div>
-            <div className="raw-text">
-              {`중3대상, 내년 고교학점제를 준비하기 위한 구체적인 방안
-이 주제로 논문 작성하려고 합니다 [M1]
-
-`}
-              <strong>
-                450만원 비용이 부담스러운데, 형틀만 잡아주는 초안 정도의 글이면 얼마에 가능할까요?
-              </strong>
-              {`[M1]
-50만원이요[M1]
-목차 기획이라는게 구체적으로 어디까지 써준다는 뜻인가요?[M1]
-50페이지 분량에 논문이 필요합니다
-분량이 많지 않은데, 가격은 어떻게 될까요?[M1]`}
-            </div>
+            <div className="raw-text">{msg.raw_text}</div>
           </div>
         </div>
 
-        {/* CENTER: 메시지 버전들 */}
+        {/* 메시지 버전들 */}
         <div className="compare-col">
           <div className="col-head">
-            <span>📨 메시지 버전 (v1 → v3)</span>
+            <span>📨 메시지 버전 (v1 → v{msg.current_version})</span>
             <span className="edit-hint">✏️ 직접 수정 OK</span>
           </div>
           <div className="col-body">
             <div className="msg-history">
-              📌 현재 버전 (검토 대기) — 클릭하면 직접 수정 가능
+              📌 현재 버전 (v{currentVersion?.version_num ?? "-"}) — 클릭하면 직접 수정 가능
             </div>
 
             <div
               ref={editorRef}
               className="msg-version current"
-              data-version="3"
+              data-version={currentVersion?.version_num ?? ""}
               contentEditable
               suppressContentEditableWarning
               spellCheck={false}
-              onBlur={(e) => setV3Text(e.currentTarget.innerText)}
             />
 
             <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
               <button
                 className="btn green"
                 type="button"
-                style={{ padding: "5px 12px", fontSize: "11.5px" }}
-                onClick={saveAsV4}
+                style={{ padding: "5px 12px", fontSize: 11.5 }}
+                onClick={saveCurrent}
+                disabled={busy}
               >
-                💾 v4로 저장
+                💾 새 버전(v{(currentVersion?.version_num ?? 0) + 1})으로 저장
               </button>
               <button
                 className="btn"
                 type="button"
-                style={{ padding: "5px 12px", fontSize: "11.5px" }}
-                onClick={restoreV3}
+                style={{ padding: "5px 12px", fontSize: 11.5 }}
+                onClick={restoreOriginal}
               >
                 ↩ 원래대로
               </button>
             </div>
 
-            <div className="msg-history">📚 이전 버전</div>
-            <div
-              className="msg-version draft"
-              data-version="2"
-              style={{ opacity: 0.7 }}
-            >{`안녕하세요 선생님.
-위드에스마케팅 이서진입니다.
-
-2024년 3월쯤에 논문 문의 주셨던 분이시죠?
-"풀 대필"이 아니더라도 "초안 형틀만" "구조 컨설팅만"
-이런 식으로 진행하는 방법도 있어서요.
-
-논문 주제 한 줄만 알려주시면 견적 드릴게요.`}</div>
-
-            <div
-              className="msg-version draft"
-              data-version="1"
-              style={{ opacity: 0.55 }}
-            >{`안녕하세요 선생님!
-위드에스마케팅 이서진입니다.
-
-예전에 논문 컨설팅 문의 주셨던 분이시죠?
-대필이 아닌 컨설팅으로 하시면, 교수님께서도 자연스럽게 통과되고
-선생님 실력도 함께 올라가서 더 좋은 방법이에요.
-
-학교·학과·논문 주제 방향만 한 줄 알려주시면
-맞춤으로 다시 안내드릴게요!`}</div>
+            {versions.length > 1 && (
+              <>
+                <div className="msg-history">📚 이전 버전</div>
+                {versions.slice(1).map((v) => (
+                  <div
+                    key={v.id}
+                    className="msg-version draft"
+                    data-version={v.version_num}
+                    style={{ opacity: 0.7 - (versions.indexOf(v) - 1) * 0.1 }}
+                  >
+                    {v.body_text}
+                    <div style={{ fontSize: 10, color: "var(--gold-500)", marginTop: 8 }}>
+                      ✍ {v.author_name || "익명"} · {new Date(v.created_at).toLocaleString("ko-KR")}
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         </div>
 
-        {/* RIGHT: 피드백 */}
+        {/* 피드백 */}
         <div className="compare-col feedback">
           <div className="col-head">
-            <span>💬 실시간 피드백</span>
+            <span>💬 실시간 피드백 ({comments.length})</span>
             <span className="edit-hint">누구나 작성 가능</span>
           </div>
           <div className="col-body">
             <div className="comment-stream">
-              {comments.map((c) => (
-                <div
-                  key={c.id}
-                  className={`comment ${c.fromKim ? "from-kim" : "from-ceo"}`}
-                >
-                  <div className="meta">
-                    <b>{c.author}</b>
-                    <span>{c.meta}</span>
-                  </div>
-                  <div className="body">{c.body}</div>
+              {comments.length === 0 && (
+                <div style={{ fontSize: 12, color: "var(--text-500)", textAlign: "center", padding: 12 }}>
+                  아직 코멘트가 없습니다.
                 </div>
-              ))}
+              )}
+              {comments.map((c) => {
+                const isKim = c.author_name === "김진";
+                return (
+                  <div
+                    key={c.id}
+                    className={`comment ${isKim ? "from-kim" : "from-ceo"}`}
+                  >
+                    <div className="meta">
+                      <b>{c.author_name || "익명"}</b>
+                      <span>
+                        {new Date(c.created_at).toLocaleString("ko-KR")}
+                        {c.replied_to_version ? ` · v${c.replied_to_version}에 코멘트` : ""}
+                      </span>
+                    </div>
+                    <div className="body">{c.body}</div>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="feedback-input">
               <div className="author-row">
-                <label htmlFor="comment-author">작성자:</label>
+                <label>작성자:</label>
                 <NameSelector />
               </div>
               <textarea
@@ -284,11 +356,11 @@ export default function ReviewScreen() {
                   {QUICK_FB.map((q) => (
                     <span
                       key={q}
-                      onClick={() => appendQuick(q)}
+                      onClick={() => setDraftComment((p) => (p ? `${p}\n${q}` : q))}
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") appendQuick(q);
+                        if (e.key === "Enter") setDraftComment((p) => (p ? `${p}\n${q}` : q));
                       }}
                     >
                       {q}
@@ -298,8 +370,9 @@ export default function ReviewScreen() {
                 <button
                   className="btn primary"
                   type="button"
-                  style={{ padding: "5px 14px", fontSize: "11px" }}
+                  style={{ padding: "5px 14px", fontSize: 11 }}
                   onClick={sendComment}
+                  disabled={busy || !draftComment.trim()}
                 >
                   코멘트 전송
                 </button>
@@ -312,21 +385,55 @@ export default function ReviewScreen() {
       <div className="decision-bar">
         <div className="left">
           <span className="hint">
-            📌 누구나 픽스/제외 가능 (이름은 자유 입력)
+            📌 누구나 픽스/제외 가능 — 현재 상태: <b>{statusKo(msg.status)}</b>
           </span>
         </div>
         <div className="right">
-          <button className="btn red" type="button">
+          <button
+            className="btn red"
+            type="button"
+            onClick={() => decide("excluded")}
+            disabled={busy}
+          >
             🚫 이 케이스 제외
           </button>
-          <button className="btn" type="button">
+          <button
+            className="btn"
+            type="button"
+            onClick={() => decide("feedback")}
+            disabled={busy}
+          >
             💬 더 수정 요청
           </button>
-          <button className="btn green" type="button">
+          <button
+            className="btn green"
+            type="button"
+            onClick={() => decide("fixed")}
+            disabled={busy}
+          >
             ✓ 픽스 (발송 OK)
           </button>
         </div>
       </div>
     </div>
   );
+}
+
+function statusKo(s: string): string {
+  switch (s) {
+    case "pending":
+      return "검토 대기";
+    case "feedback":
+      return "피드백";
+    case "revised":
+      return "수정 완료";
+    case "fixed":
+      return "픽스 완료 ✓";
+    case "excluded":
+      return "제외됨 🚫";
+    case "draft":
+      return "초안";
+    default:
+      return s;
+  }
 }

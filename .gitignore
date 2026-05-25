@@ -30,6 +30,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# seed data (고객 본문 raw_text 포함 — 공개 레포에 올리지 않음)
+# 필요 시 로컬에서 _scripts/export_supabase_seed.py로 재생성
+/supabase/seed.sql
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

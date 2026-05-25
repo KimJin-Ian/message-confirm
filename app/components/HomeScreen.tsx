@@ -1,255 +1,271 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import NameSelector from "./NameSelector";
-import type { Screen } from "./types";
+import {
+  fetchAllMessages,
+  fetchKpiCounts,
+  subscribeToMessages,
+  type KpiCounts,
+} from "@/lib/api";
+import type { Message } from "@/lib/supabase";
 
 type Props = {
-  onGoReview: () => void;
+  onSelectMessage: (messageId: string) => void;
 };
 
-export default function HomeScreen({ onGoReview }: Props) {
+export default function HomeScreen({ onSelectMessage }: Props) {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [kpi, setKpi] = useState<KpiCounts>({
+    total: 0,
+    fixed: 0,
+    revised: 0,
+    feedback: 0,
+    pending: 0,
+    excluded: 0,
+    draft: 0,
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    try {
+      const [msgs, counts] = await Promise.all([
+        fetchAllMessages(),
+        fetchKpiCounts(),
+      ]);
+      setMessages(msgs);
+      setKpi(counts);
+      setError(null);
+    } catch (e: unknown) {
+      const m = e instanceof Error ? e.message : "데이터 로드 실패";
+      setError(m);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    const unsub = subscribeToMessages(load);
+    return unsub;
+  }, []);
+
+  const pct = (n: number) =>
+    kpi.total ? Math.round((n / kpi.total) * 100) : 0;
+
+  const priority = messages
+    .filter((m) => m.status === "pending" || m.status === "revised" || m.status === "feedback")
+    .slice(0, 8);
+
   return (
     <div className="screen active" id="screen-home">
       <div className="page-head">
         <div>
           <h2>안녕하세요 👋</h2>
           <div className="sub">
-            메시지 컨펌 작업 — 진행 현황 · 로그인 없이 자유 편집
+            메시지 컨펌 작업 — 현재 진행 현황 · 로그인 없이 자유 편집
           </div>
         </div>
         <div className="actions">
           <NameSelector />
-          <button className="btn" type="button">
-            📤 픽스 일괄 내보내기
+          <button className="btn" type="button" onClick={load}>
+            🔄 새로고침
           </button>
-          <button className="btn primary" type="button" onClick={onGoReview}>
+          <button
+            className="btn primary"
+            type="button"
+            onClick={() => {
+              const first = priority[0];
+              if (first) onSelectMessage(first.id);
+            }}
+            disabled={priority.length === 0}
+          >
             → 검토 시작
           </button>
         </div>
       </div>
 
+      {error && (
+        <div
+          style={{
+            background: "var(--red-50)",
+            border: "1px solid var(--red-600)",
+            color: "var(--red-600)",
+            padding: "12px 16px",
+            borderRadius: 8,
+            marginBottom: 16,
+            fontSize: 13,
+          }}
+        >
+          ⚠ {error}
+          <div style={{ fontSize: 11, color: "var(--text-500)", marginTop: 4 }}>
+            .env.local 또는 Vercel 환경변수에 NEXT_PUBLIC_SUPABASE_ANON_KEY가 설정됐는지 확인하세요.
+          </div>
+        </div>
+      )}
+
       {/* KPI */}
       <div className="kpi-grid">
         <div className="kpi featured">
           <div className="lbl">전체 메시지</div>
-          <div className="num">50</div>
-          <div className="delta">우선순위 50건</div>
+          <div className="num">{loading ? "—" : kpi.total}</div>
+          <div className="delta">Top50 우선순위</div>
         </div>
         <div className="kpi">
           <div className="lbl">픽스 완료 ✓</div>
           <div className="num" style={{ color: "var(--green-600)" }}>
-            12
+            {loading ? "—" : kpi.fixed}
           </div>
-          <div className="delta">24%</div>
+          <div className="delta">{pct(kpi.fixed)}%</div>
         </div>
         <div className="kpi">
           <div className="lbl">수정 완료</div>
           <div className="num" style={{ color: "var(--gold-600)" }}>
-            8
+            {loading ? "—" : kpi.revised}
           </div>
           <div className="delta">확인 대기</div>
         </div>
         <div className="kpi">
           <div className="lbl">피드백 옴</div>
           <div className="num" style={{ color: "var(--orange-600)" }}>
-            6
+            {loading ? "—" : kpi.feedback}
           </div>
           <div className="delta">재수정 대기</div>
         </div>
         <div className="kpi">
           <div className="lbl">미검토</div>
           <div className="num" style={{ color: "var(--blue-600)" }}>
-            9
+            {loading ? "—" : kpi.pending}
           </div>
           <div className="delta">검토 대기</div>
         </div>
       </div>
 
-      {/* 전체 진행률 */}
+      {/* 진행률 */}
       <div className="progress-overall">
         <div className="progress-head">
           <h3>📈 전체 진행률</h3>
           <div className="pct">
-            24%{" "}
-            <span
-              style={{
-                fontSize: "13px",
-                color: "var(--text-500)",
-                fontWeight: 400,
-              }}
-            >
+            {pct(kpi.fixed)}%{" "}
+            <span style={{ fontSize: "13px", color: "var(--text-500)", fontWeight: 400 }}>
               / 100%
             </span>
           </div>
         </div>
         <div className="progress-bar">
-          <div className="seg fixed" title="픽스 12"></div>
-          <div className="seg revised" title="수정 완료 8"></div>
-          <div className="seg feedback" title="피드백 옴 6"></div>
-          <div className="seg pending" title="미검토 9"></div>
+          <div
+            className="seg fixed"
+            style={{ width: `${pct(kpi.fixed)}%` }}
+            title={`픽스 ${kpi.fixed}`}
+          />
+          <div
+            className="seg revised"
+            style={{ width: `${pct(kpi.revised)}%` }}
+            title={`수정 ${kpi.revised}`}
+          />
+          <div
+            className="seg feedback"
+            style={{ width: `${pct(kpi.feedback)}%` }}
+            title={`피드백 ${kpi.feedback}`}
+          />
+          <div
+            className="seg pending"
+            style={{ width: `${pct(kpi.pending)}%` }}
+            title={`미검토 ${kpi.pending}`}
+          />
         </div>
         <div className="progress-legend">
           <span>
-            <span
-              className="dot"
-              style={{ background: "var(--green-600)" }}
-            ></span>
-            픽스 12 (24%)
+            <span className="dot" style={{ background: "var(--green-600)" }} />
+            픽스 {kpi.fixed} ({pct(kpi.fixed)}%)
           </span>
           <span>
-            <span
-              className="dot"
-              style={{ background: "var(--gold-600)" }}
-            ></span>
-            수정 완료 8 (16%)
+            <span className="dot" style={{ background: "var(--gold-600)" }} />
+            수정 완료 {kpi.revised} ({pct(kpi.revised)}%)
           </span>
           <span>
-            <span
-              className="dot"
-              style={{ background: "var(--orange-600)" }}
-            ></span>
-            피드백 옴 6 (12%)
+            <span className="dot" style={{ background: "var(--orange-600)" }} />
+            피드백 옴 {kpi.feedback} ({pct(kpi.feedback)}%)
           </span>
           <span>
-            <span
-              className="dot"
-              style={{ background: "var(--blue-600)" }}
-            ></span>
-            미검토 9 (18%)
+            <span className="dot" style={{ background: "var(--blue-600)" }} />
+            미검토 {kpi.pending} ({pct(kpi.pending)}%)
           </span>
-          <span>
-            <span className="dot" style={{ background: "var(--line)" }}></span>
-            초안 대기 15 (30%)
-          </span>
-        </div>
-      </div>
-
-      {/* 최근 활동 + 픽스 미리보기 */}
-      <div className="two-col">
-        <div className="panel">
-          <div className="panel-head">
-            <h3>🔔 최근 활동 (실시간)</h3>
-            <span className="more">전체 보기 →</span>
-          </div>
-          <div className="panel-body" style={{ padding: "4px 20px" }}>
-            <ActivityRow
-              icon="💬"
-              color="var(--orange-600)"
-              title={
-                <>
-                  <b>이서진</b>이 1703(논문) 메시지에 피드백 남김
-                </>
-              }
-              detail={'"풀 대필 표현을 빼주세요. 우리는 컨설팅 위주예요" · 5분 전'}
-            />
-            <ActivityRow
-              icon="✓"
-              color="var(--green-600)"
-              title={
-                <>
-                  <b>이서진</b>이 4544(자서전) 메시지 픽스 완료
-                </>
-              }
-              detail="발송 준비 OK · 23분 전"
-            />
-            <ActivityRow
-              icon="✏️"
-              color="var(--gold-600)"
-              title={
-                <>
-                  <b>김진</b>이 3456(자비) 메시지 v3 업로드
-                </>
-              }
-              detail='"원고 완성됨"으로 단정 수정 · 1시간 전'
-            />
-            <ActivityRow
-              icon="📝"
-              color="var(--blue-600)"
-              title={
-                <>
-                  <b>김진</b>이 신규 5건 등록
-                </>
-              }
-              detail="7522·1703·4544·3456·7501 · 2시간 전"
-              last
-            />
-          </div>
-        </div>
-
-        <div className="panel">
-          <div className="panel-head">
-            <h3>✅ 최근 픽스된 메시지</h3>
-            <span className="more">12건 전체 →</span>
-          </div>
-          <div className="panel-body" style={{ padding: "4px 20px" }}>
-            <FixedPreviewRow
-              id="4544 · 자서전"
-              ago="23분 전"
-              text='"오래 전이지만 자서전 문의 주셨던 분이시죠? 그때 말씀하셨던 이야기를..."'
-            />
-            <FixedPreviewRow
-              id="3131 · 박사논문"
-              ago="1시간 전"
-              text='"논문 관련해서 두 번 연락 주셨던 분이시죠? 박사 1학기 때 구조 잡아두면..."'
-            />
-            <FixedPreviewRow
-              id="8543 · 논문"
-              ago="2시간 전"
-              text='"2022년 4월쯤 논문 문의 주셨던 분이시죠? 페이지당 2만원 생각하셨던 게..."'
-              last
-            />
-          </div>
+          {kpi.excluded > 0 && (
+            <span>
+              <span className="dot" style={{ background: "var(--red-600)" }} />
+              제외 {kpi.excluded} ({pct(kpi.excluded)}%)
+            </span>
+          )}
         </div>
       </div>
 
       {/* 우선 처리 필요 */}
       <div className="panel">
         <div className="panel-head">
-          <h3>🚨 우선 처리 필요 (검토/수정 필요)</h3>
+          <h3>🚨 우선 처리 필요 ({priority.length}건)</h3>
         </div>
         <table className="data">
           <thead>
             <tr>
-              <th>#</th>
+              <th>순위</th>
               <th>끝4자리</th>
+              <th>이름</th>
               <th>분야</th>
+              <th>시기</th>
               <th>상태</th>
-              <th>버전</th>
-              <th>마지막 활동</th>
+              <th>v</th>
+              <th>총점</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            <PriorityRow
-              n={1}
-              tail="1703"
-              field="논문"
-              status="pending"
-              statusLabel="🔵 검토 대기"
-              version="v1"
-              ago="2시간 전"
-              onClick={onGoReview}
-            />
-            <PriorityRow
-              n={2}
-              tail="3456"
-              field="자비출판"
-              status="revised"
-              statusLabel="🟡 수정 완료"
-              version="v3"
-              ago="1시간 전"
-              onClick={onGoReview}
-            />
-            <PriorityRow
-              n={3}
-              tail="7501"
-              field="논문"
-              status="pending"
-              statusLabel="🔵 검토 대기"
-              version="v1"
-              ago="2시간 전"
-              onClick={onGoReview}
-            />
+            {loading && (
+              <tr>
+                <td colSpan={9} style={{ textAlign: "center", color: "var(--text-500)", padding: 30 }}>
+                  로딩 중...
+                </td>
+              </tr>
+            )}
+            {!loading && priority.length === 0 && (
+              <tr>
+                <td colSpan={9} style={{ textAlign: "center", color: "var(--green-600)", padding: 30, fontWeight: 600 }}>
+                  ✓ 처리해야 할 메시지가 없습니다.
+                </td>
+              </tr>
+            )}
+            {priority.map((m) => (
+              <tr key={m.id} onClick={() => onSelectMessage(m.id)}>
+                <td>{m.rank}</td>
+                <td><b>{m.tail4}</b></td>
+                <td>{m.name_guess || "선생님"}</td>
+                <td>
+                  <span className="field-pill">{m.field}</span>
+                </td>
+                <td style={{ fontSize: 11, color: "var(--text-500)" }}>{m.period}</td>
+                <td>
+                  <span className={`status-tag ${m.status}`}>
+                    {statusLabel(m.status)}
+                  </span>
+                </td>
+                <td>v{m.current_version}</td>
+                <td>{m.total_score ?? "-"}</td>
+                <td>
+                  <button
+                    className="btn primary"
+                    type="button"
+                    style={{ padding: "4px 12px", fontSize: 11 }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectMessage(m.id);
+                    }}
+                  >
+                    → 검토
+                  </button>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -257,148 +273,21 @@ export default function HomeScreen({ onGoReview }: Props) {
   );
 }
 
-function ActivityRow({
-  icon,
-  color,
-  title,
-  detail,
-  last,
-}: {
-  icon: string;
-  color: string;
-  title: React.ReactNode;
-  detail: string;
-  last?: boolean;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        padding: "12px 0",
-        borderBottom: last ? "none" : "1px solid var(--line)",
-        gap: "12px",
-      }}
-    >
-      <span style={{ color, fontSize: "18px" }}>{icon}</span>
-      <div>
-        <div
-          style={{
-            fontSize: "12.5px",
-            color: "var(--navy-900)",
-            marginBottom: "2px",
-          }}
-        >
-          {title}
-        </div>
-        <div style={{ fontSize: "11px", color: "var(--text-500)" }}>
-          {detail}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function FixedPreviewRow({
-  id,
-  ago,
-  text,
-  last,
-}: {
-  id: string;
-  ago: string;
-  text: string;
-  last?: boolean;
-}) {
-  return (
-    <div
-      style={{
-        padding: "12px 0",
-        borderBottom: last ? "none" : "1px solid var(--line)",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          marginBottom: "4px",
-        }}
-      >
-        <span
-          style={{
-            fontSize: "12.5px",
-            color: "var(--navy-900)",
-            fontWeight: 600,
-          }}
-        >
-          {id}
-        </span>
-        <span
-          style={{
-            fontSize: "10px",
-            color: "var(--green-600)",
-            fontWeight: 700,
-          }}
-        >
-          FIXED · {ago}
-        </span>
-      </div>
-      <div
-        style={{
-          fontSize: "11px",
-          color: "var(--text-500)",
-          lineHeight: 1.55,
-        }}
-      >
-        {text}
-      </div>
-    </div>
-  );
-}
-
-function PriorityRow({
-  n,
-  tail,
-  field,
-  status,
-  statusLabel,
-  version,
-  ago,
-  onClick,
-}: {
-  n: number;
-  tail: string;
-  field: string;
-  status: "pending" | "revised";
-  statusLabel: string;
-  version: string;
-  ago: string;
-  onClick: () => void;
-}) {
-  return (
-    <tr onClick={onClick}>
-      <td>{n}</td>
-      <td>{tail}</td>
-      <td>
-        <span className="field-pill">{field}</span>
-      </td>
-      <td>
-        <span className={`status-tag ${status}`}>{statusLabel}</span>
-      </td>
-      <td>{version}</td>
-      <td>{ago}</td>
-      <td>
-        <button
-          className="btn primary"
-          type="button"
-          style={{ padding: "4px 12px", fontSize: "11px" }}
-          onClick={(e) => {
-            e.stopPropagation();
-            onClick();
-          }}
-        >
-          → 검토하기
-        </button>
-      </td>
-    </tr>
-  );
+function statusLabel(s: string): string {
+  switch (s) {
+    case "pending":
+      return "🔵 검토 대기";
+    case "feedback":
+      return "🟠 피드백";
+    case "revised":
+      return "🟡 수정 완료";
+    case "fixed":
+      return "🟢 픽스";
+    case "excluded":
+      return "🚫 제외";
+    case "draft":
+      return "⚪ 초안";
+    default:
+      return s;
+  }
 }
