@@ -19,9 +19,24 @@ const QUICK_FB = ["✏️ 톤 조정", "🚫 단어 빼기", "➕ 사례 추가"
 type Props = {
   messageId: string | null;
   onBack: () => void;
+  onPrev?: () => void;
+  onNext?: () => void;
+  canPrev?: boolean;
+  canNext?: boolean;
+  queueIndex?: number; // 0-based
+  queueTotal?: number;
 };
 
-export default function ReviewScreen({ messageId, onBack }: Props) {
+export default function ReviewScreen({
+  messageId,
+  onBack,
+  onPrev,
+  onNext,
+  canPrev,
+  canNext,
+  queueIndex,
+  queueTotal,
+}: Props) {
   const { name } = useAuthor();
   const editorRef = useRef<HTMLDivElement>(null);
 
@@ -195,6 +210,21 @@ export default function ReviewScreen({ messageId, onBack }: Props) {
           </div>
         </div>
         <div className="actions">
+          {typeof queueIndex === "number" && typeof queueTotal === "number" && queueTotal > 0 && (
+            <span
+              style={{
+                background: "var(--gold-50)",
+                border: "1px solid var(--gold-100)",
+                color: "var(--gold-600)",
+                padding: "6px 12px",
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 700,
+              }}
+            >
+              검토 큐 {queueIndex + 1} / {queueTotal}
+            </span>
+          )}
           <NameSelector />
           <button className="btn" type="button" onClick={onBack}>
             ← 홈
@@ -414,6 +444,56 @@ export default function ReviewScreen({ messageId, onBack }: Props) {
             ✓ 픽스 (발송 OK)
           </button>
         </div>
+      </div>
+
+      {/* 큰 이전/다음 네비게이션 */}
+      <div className="queue-nav">
+        <button
+          type="button"
+          className="queue-nav-btn prev"
+          onClick={onPrev}
+          disabled={!canPrev || busy}
+        >
+          <span className="arr">←</span>
+          <span className="lbl">
+            <span className="muted">이전 케이스</span>
+            <span className="big">
+              {canPrev ? `Top ${queueIndex} 로` : "처음"}
+            </span>
+          </span>
+        </button>
+        <div className="queue-progress">
+          {typeof queueIndex === "number" && typeof queueTotal === "number" && queueTotal > 0 ? (
+            <>
+              <div className="num">{queueIndex + 1} <span>/ {queueTotal}</span></div>
+              <div className="lbl">검토 큐 진행률</div>
+              <div className="bar">
+                <div
+                  className="fill"
+                  style={{
+                    width: `${((queueIndex + 1) / queueTotal) * 100}%`,
+                  }}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="lbl">큐 정보 없음</div>
+          )}
+        </div>
+        <button
+          type="button"
+          className="queue-nav-btn next"
+          onClick={onNext}
+          disabled={!canNext || busy}
+        >
+          <span className="lbl">
+            <span className="muted">다음 케이스</span>
+            <span className="big">
+              {canNext ? `Top ${(queueIndex ?? 0) + 2} 로` : "마지막"}
+            </span>
+          </span>
+          <span className="arr">→</span>
+        </button>
       </div>
     </div>
   );

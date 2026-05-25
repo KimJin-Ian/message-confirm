@@ -919,6 +919,114 @@ table.data tr:hover td {
   color: var(--text-500);
 }
 
+/* QUEUE NAVIGATION (큰 이전/다음) */
+.queue-nav {
+  display: grid;
+  grid-template-columns: 1fr 240px 1fr;
+  gap: 14px;
+  align-items: stretch;
+  margin-top: 16px;
+}
+.queue-nav-btn {
+  background: white;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  padding: 18px 22px;
+  cursor: pointer;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  transition: all 0.15s;
+  color: var(--text-700);
+  min-height: 84px;
+}
+.queue-nav-btn:hover:not(:disabled) {
+  border-color: var(--gold-600);
+  background: var(--gold-50);
+  transform: translateY(-1px);
+}
+.queue-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.queue-nav-btn.prev { justify-content: flex-start; text-align: left; }
+.queue-nav-btn.next { justify-content: flex-end; text-align: right; }
+.queue-nav-btn .arr {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--gold-600);
+  line-height: 1;
+}
+.queue-nav-btn .lbl {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.queue-nav-btn .lbl .muted {
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  color: var(--text-500);
+  font-weight: 600;
+}
+.queue-nav-btn .lbl .big {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--navy-900);
+  letter-spacing: -0.01em;
+}
+.queue-progress {
+  background: var(--navy-900);
+  color: white;
+  border-radius: 14px;
+  padding: 14px 18px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  min-height: 84px;
+}
+.queue-progress .num {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--gold-600);
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.queue-progress .num span {
+  font-size: 14px;
+  color: rgba(255,255,255,0.55);
+  font-weight: 600;
+}
+.queue-progress .lbl {
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  color: var(--gold-600);
+  font-weight: 700;
+}
+.queue-progress .bar {
+  height: 4px;
+  background: rgba(255,255,255,0.15);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+.queue-progress .bar .fill {
+  height: 100%;
+  background: var(--gold-600);
+  transition: width 0.3s;
+}
+@media (max-width: 760px) {
+  .queue-nav {
+    grid-template-columns: 1fr 1fr;
+  }
+  .queue-progress {
+    grid-column: 1 / -1;
+    order: -1;
+  }
+}
+
 /* FIXED COLLECTION CARDS */
 .fixed-grid {
   display: grid;
