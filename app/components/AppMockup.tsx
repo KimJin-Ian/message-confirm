@@ -6,7 +6,6 @@ import Sidebar from "./Sidebar";
 import HomeScreen from "./HomeScreen";
 import ReviewScreen from "./ReviewScreen";
 import FixedScreen from "./FixedScreen";
-import Notes from "./Notes";
 import type { Screen } from "./types";
 
 export default function AppMockup() {
@@ -32,7 +31,6 @@ export default function AppMockup() {
           )}
           {screen === "fixed" && <FixedScreen onSelectMessage={goReview} />}
         </main>
-        <Notes />
       </div>
     </NameProvider>
   );
