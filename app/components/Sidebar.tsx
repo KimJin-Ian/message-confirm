@@ -1,34 +1,22 @@
 "use client";
 
 import type { Screen } from "./types";
-
-const NAV: Array<{
-  screen: Screen;
-  icon: string;
-  label: string;
-  badge?: { count: number; color: "red" | "green" | "gold" };
-}> = [
-  { screen: "home", icon: "📊", label: "대시보드 홈" },
-  {
-    screen: "review",
-    icon: "🔍",
-    label: "검토 화면",
-    badge: { count: 7, color: "red" },
-  },
-  {
-    screen: "fixed",
-    icon: "✅",
-    label: "픽스 모음집",
-    badge: { count: 12, color: "green" },
-  },
-];
+import type { KpiCounts } from "@/lib/api";
 
 type Props = {
   current: Screen;
   onChange: (next: Screen) => void;
+  counts: KpiCounts | null;
 };
 
-export default function Sidebar({ current, onChange }: Props) {
+export default function Sidebar({ current, onChange, counts }: Props) {
+  // 검토가 필요한 건수 = pending + revised + feedback (대표가 보거나 김진이 수정할 것)
+  const reviewCount = counts
+    ? counts.pending + counts.revised + counts.feedback
+    : null;
+  const fixedCount = counts ? counts.fixed : null;
+  const excludedCount = counts ? counts.excluded : null;
+
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -43,21 +31,36 @@ export default function Sidebar({ current, onChange }: Props) {
 
       <div className="sidebar-section">메인 메뉴</div>
 
-      {NAV.map((item) => (
-        <button
-          key={item.screen}
-          type="button"
-          className={`nav-item ${current === item.screen ? "active" : ""}`}
-          onClick={() => onChange(item.screen)}
-        >
-          <span className="icon">{item.icon}</span> {item.label}
-          {item.badge && (
-            <span className={`badge ${item.badge.color}`}>
-              {item.badge.count}
-            </span>
-          )}
-        </button>
-      ))}
+      <NavItem
+        active={current === "home"}
+        icon="📊"
+        label="대시보드 홈"
+        onClick={() => onChange("home")}
+      />
+      <NavItem
+        active={current === "review"}
+        icon="🔍"
+        label="검토 화면"
+        badge={reviewCount}
+        badgeColor="red"
+        onClick={() => onChange("review")}
+      />
+      <NavItem
+        active={current === "fixed"}
+        icon="✅"
+        label="픽스 모음집"
+        badge={fixedCount}
+        badgeColor="green"
+        onClick={() => onChange("fixed")}
+      />
+      <NavItem
+        active={current === "excluded"}
+        icon="🚫"
+        label="제외 케이스"
+        badge={excludedCount}
+        badgeColor="gold"
+        onClick={() => onChange("excluded")}
+      />
 
       <div className="sidebar-footer">
         <div className="open-tag">
@@ -71,5 +74,36 @@ export default function Sidebar({ current, onChange }: Props) {
         </div>
       </div>
     </aside>
+  );
+}
+
+function NavItem({
+  active,
+  icon,
+  label,
+  badge,
+  badgeColor,
+  onClick,
+}: {
+  active: boolean;
+  icon: string;
+  label: string;
+  badge?: number | null;
+  badgeColor?: "red" | "green" | "gold";
+  onClick: () => void;
+}) {
+  // 0이거나 null이면 배지 안 보임
+  const showBadge = typeof badge === "number" && badge > 0;
+  return (
+    <button
+      type="button"
+      className={`nav-item ${active ? "active" : ""}`}
+      onClick={onClick}
+    >
+      <span className="icon">{icon}</span> {label}
+      {showBadge && (
+        <span className={`badge ${badgeColor ?? ""}`}>{badge}</span>
+      )}
+    </button>
   );
 }

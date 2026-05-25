@@ -46,6 +46,15 @@ export async function updateMessageStatus(
   if (error) throw error;
 }
 
+/** 픽스됐거나 제외된 케이스를 다시 검토 대상(pending)으로 되돌림. fixed_at도 null로 초기화. */
+export async function reactivateMessage(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("messages")
+    .update({ status: "pending", fixed_at: null })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 // ──────────────────────────────────────────────────────────────
 // 2) Versions
 // ──────────────────────────────────────────────────────────────

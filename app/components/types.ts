@@ -1,1 +1,1 @@
-export type Screen = "home" | "review" | "fixed";
+export type Screen = "home" | "review" | "fixed" | "excluded";

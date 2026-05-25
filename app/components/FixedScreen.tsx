@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   fetchAllMessages,
   fetchVersions,
+  reactivateMessage,
   subscribeToMessages,
 } from "@/lib/api";
 import type { Message } from "@/lib/supabase";
@@ -90,6 +91,16 @@ export default function FixedScreen({ onSelectMessage }: Props) {
       alert("✓ 복사됨");
     } catch {
       alert("복사 실패 (브라우저 권한 확인)");
+    }
+  };
+
+  const reactivate = async (id: string) => {
+    if (!confirm("이 케이스를 다시 검토 대상(pending)으로 되돌릴까요?")) return;
+    try {
+      await reactivateMessage(id);
+      await load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "되돌리기 실패");
     }
   };
 
@@ -243,15 +254,29 @@ export default function FixedScreen({ onSelectMessage }: Props) {
                     : "—"}{" "}
                   · v{r.msg.current_version}
                 </span>
-                <span
-                  className="copy-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    copyBody(r.preview);
-                  }}
-                  role="button"
-                >
-                  📋 복사
+                <span style={{ display: "flex", gap: 4 }}>
+                  <span
+                    className="copy-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      copyBody(r.preview);
+                    }}
+                    role="button"
+                  >
+                    📋 복사
+                  </span>
+                  <span
+                    className="copy-btn"
+                    style={{ background: "var(--blue-600)", color: "white" }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      reactivate(r.msg.id);
+                    }}
+                    role="button"
+                    title="다시 검토 대상으로 되돌리기"
+                  >
+                    ↩ 검토로
+                  </span>
                 </span>
               </div>
             </div>
