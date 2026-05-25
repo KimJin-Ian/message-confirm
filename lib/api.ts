@@ -184,36 +184,54 @@ export async function fetchKpiCounts(): Promise<KpiCounts> {
 // ──────────────────────────────────────────────────────────────
 // 5) Realtime 구독
 // ──────────────────────────────────────────────────────────────
-export function subscribeToMessages(onChange: () => void) {
-  const channel = supabase
-    .channel("messages-changes")
-    .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, onChange)
-    .subscribe();
-  return () => {
-    supabase.removeChannel(channel);
-  };
+export function subscribeToMessages(onChange: () => void): () => void {
+  try {
+    const channel = supabase
+      .channel("messages-changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, onChange)
+      .subscribe();
+    return () => {
+      try {
+        supabase.removeChannel(channel);
+      } catch {
+        /* ignore */
+      }
+    };
+  } catch (e) {
+    console.warn("[Realtime] subscribeToMessages 실패 — 환경변수 확인", e);
+    return () => {};
+  }
 }
 
-export function subscribeToMessage(messageId: string, onChange: () => void) {
-  const channel = supabase
-    .channel(`message-${messageId}`)
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "message_versions", filter: `message_id=eq.${messageId}` },
-      onChange
-    )
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "comments", filter: `message_id=eq.${messageId}` },
-      onChange
-    )
-    .on(
-      "postgres_changes",
-      { event: "UPDATE", schema: "public", table: "messages", filter: `id=eq.${messageId}` },
-      onChange
-    )
-    .subscribe();
-  return () => {
-    supabase.removeChannel(channel);
-  };
+export function subscribeToMessage(messageId: string, onChange: () => void): () => void {
+  try {
+    const channel = supabase
+      .channel(`message-${messageId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "message_versions", filter: `message_id=eq.${messageId}` },
+        onChange
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "comments", filter: `message_id=eq.${messageId}` },
+        onChange
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "messages", filter: `id=eq.${messageId}` },
+        onChange
+      )
+      .subscribe();
+    return () => {
+      try {
+        supabase.removeChannel(channel);
+      } catch {
+        /* ignore */
+      }
+    };
+  } catch (e) {
+    console.warn("[Realtime] subscribeToMessage 실패", e);
+    return () => {};
+  }
 }

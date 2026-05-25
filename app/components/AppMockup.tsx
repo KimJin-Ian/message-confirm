@@ -30,7 +30,12 @@ export default function AppMockup() {
 
   useEffect(() => {
     reloadCounts();
-    return subscribeToMessages(reloadCounts);
+    try {
+      return subscribeToMessages(reloadCounts);
+    } catch (e) {
+      console.warn("[Realtime] 구독 실패 — 환경변수 확인 필요", e);
+      return undefined;
+    }
   }, [reloadCounts]);
 
   const goReview = (messageId?: string) => {

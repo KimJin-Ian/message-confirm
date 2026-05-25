@@ -47,8 +47,12 @@ export default function HomeScreen({ onSelectMessage }: Props) {
 
   useEffect(() => {
     load();
-    const unsub = subscribeToMessages(load);
-    return unsub;
+    try {
+      return subscribeToMessages(load);
+    } catch {
+      return undefined;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const pct = (n: number) =>
