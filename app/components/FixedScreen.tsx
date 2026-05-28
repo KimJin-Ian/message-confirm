@@ -5,9 +5,11 @@ import {
   fetchAllMessages,
   fetchVersions,
   reactivateMessage,
+  saveNewVersion,
   subscribeToMessages,
 } from "@/lib/api";
 import type { Message } from "@/lib/supabase";
+import { useAuthor } from "./NameContext";
 
 type Props = {
   onSelectMessage: (messageId: string) => void;
@@ -19,6 +21,7 @@ interface FixedRow {
 }
 
 export default function FixedScreen({ onSelectMessage }: Props) {
+  const { name } = useAuthor();
   const [rows, setRows] = useState<FixedRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +30,38 @@ export default function FixedScreen({ onSelectMessage }: Props) {
   const [sort, setSort] = useState<"recent" | "rank" | "score">("recent");
   // 카드 클릭 시 인라인으로 전체 본문 펼치기 (검토화면으로 이동 X)
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // 인라인 편집: 어느 카드를 편집 중인지 + 현재 텍스트 + 저장중 상태
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState<string>("");
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  const startEdit = (id: string, currentText: string) => {
+    setExpandedId(id);
+    setEditingId(id);
+    setEditText(currentText);
+  };
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditText("");
+  };
+  const commitEdit = async (id: string) => {
+    const trimmed = editText.trim();
+    if (!trimmed) {
+      alert("본문이 비어 있습니다.");
+      return;
+    }
+    setSavingId(id);
+    try {
+      await saveNewVersion(id, trimmed, name || null);
+      setEditingId(null);
+      setEditText("");
+      await load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "저장 실패");
+    } finally {
+      setSavingId(null);
+    }
+  };
 
   const load = async () => {
     try {
@@ -232,12 +267,18 @@ export default function FixedScreen({ onSelectMessage }: Props) {
         <div className="fixed-grid">
           {sorted.map((r) => {
             const isExpanded = expandedId === r.msg.id;
+            const isEditing = editingId === r.msg.id;
+            const isSaving = savingId === r.msg.id;
             return (
               <div
                 key={r.msg.id}
-                className={`fixed-card${isExpanded ? " expanded" : ""}`}
-                onClick={() => setExpandedId(isExpanded ? null : r.msg.id)}
-                title={isExpanded ? "다시 접기" : "전체 본문 펼쳐보기"}
+                className={`fixed-card${isExpanded ? " expanded" : ""}${isEditing ? " editing" : ""}`}
+                onClick={() => {
+                  // 편집 중에는 카드 본체 클릭으로 접지 않도록
+                  if (isEditing) return;
+                  setExpandedId(isExpanded ? null : r.msg.id);
+                }}
+                title={isEditing ? "" : isExpanded ? "다시 접기" : "전체 본문 펼쳐보기"}
               >
                 <div className="top">
                   <span className="id">
@@ -249,7 +290,42 @@ export default function FixedScreen({ onSelectMessage }: Props) {
                   {r.msg.name_guess || "선생님"} · {r.msg.period} ·{" "}
                   {r.msg.total_score?.toFixed(1)}점
                 </h4>
-                {isExpanded ? (
+                {isEditing ? (
+                  <textarea
+                    className="preview full"
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => {
+                      // Ctrl/Cmd+Enter = 저장, Esc = 취소
+                      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                        e.preventDefault();
+                        commitEdit(r.msg.id);
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        cancelEdit();
+                      }
+                    }}
+                    style={{
+                      width: "100%",
+                      minHeight: 220,
+                      resize: "vertical",
+                      fontFamily: "inherit",
+                      fontSize: 13,
+                      lineHeight: 1.75,
+                      padding: "12px 14px",
+                      border: "1px solid var(--gold-600)",
+                      borderRadius: 8,
+                      outline: "none",
+                      whiteSpace: "pre-wrap",
+                      color: "var(--navy-900)",
+                      background: "white",
+                      marginBottom: 10,
+                    }}
+                    disabled={isSaving}
+                    autoFocus
+                  />
+                ) : isExpanded ? (
                   <div
                     className="preview full"
                     style={{
@@ -274,43 +350,72 @@ export default function FixedScreen({ onSelectMessage }: Props) {
                       : "—"}{" "}
                     · v{r.msg.current_version}
                   </span>
-                  <span style={{ display: "flex", gap: 4 }}>
-                    <span
-                      className="copy-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        copyBody(r.preview);
-                      }}
-                      role="button"
-                      title="본문 클립보드 복사"
-                    >
-                      📋 복사
+                  {isEditing ? (
+                    <span style={{ display: "flex", gap: 4 }}>
+                      <span
+                        className="copy-btn"
+                        style={{ background: "var(--text-500)", color: "white", opacity: isSaving ? 0.6 : 1 }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!isSaving) cancelEdit();
+                        }}
+                        role="button"
+                        title="취소 (Esc)"
+                      >
+                        ✕ 취소
+                      </span>
+                      <span
+                        className="copy-btn"
+                        style={{ background: "var(--green-600)", color: "white", opacity: isSaving ? 0.6 : 1 }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!isSaving) commitEdit(r.msg.id);
+                        }}
+                        role="button"
+                        title="저장 (Ctrl+Enter) — 새 버전으로 저장, 픽스 상태 유지"
+                      >
+                        {isSaving ? "저장 중…" : "💾 저장"}
+                      </span>
                     </span>
-                    <span
-                      className="copy-btn"
-                      style={{ background: "var(--gold-600)", color: "white" }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSelectMessage(r.msg.id);
-                      }}
-                      role="button"
-                      title="검토화면에서 다시 편집"
-                    >
-                      ✏️ 편집
+                  ) : (
+                    <span style={{ display: "flex", gap: 4 }}>
+                      <span
+                        className="copy-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          copyBody(r.preview);
+                        }}
+                        role="button"
+                        title="본문 클립보드 복사"
+                      >
+                        📋 복사
+                      </span>
+                      <span
+                        className="copy-btn"
+                        style={{ background: "var(--gold-600)", color: "white" }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startEdit(r.msg.id, r.preview);
+                        }}
+                        role="button"
+                        title="이 자리에서 바로 편집 (탭 이동 없음)"
+                      >
+                        ✏️ 편집
+                      </span>
+                      <span
+                        className="copy-btn"
+                        style={{ background: "var(--blue-600)", color: "white" }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          reactivate(r.msg.id);
+                        }}
+                        role="button"
+                        title="다시 검토 대상(pending)으로 되돌리기"
+                      >
+                        ↩ 검토로
+                      </span>
                     </span>
-                    <span
-                      className="copy-btn"
-                      style={{ background: "var(--blue-600)", color: "white" }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        reactivate(r.msg.id);
-                      }}
-                      role="button"
-                      title="다시 검토 대상(pending)으로 되돌리기"
-                    >
-                      ↩ 검토로
-                    </span>
-                  </span>
+                  )}
                 </div>
               </div>
             );
