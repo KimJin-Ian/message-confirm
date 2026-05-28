@@ -52,7 +52,10 @@ export default function FixedScreen({ onSelectMessage }: Props) {
     }
     setSavingId(id);
     try {
-      await saveNewVersion(id, trimmed, name || null);
+      // 픽스 모음집에서의 인라인 편집 — 새 버전은 기록하되 status 는 "fixed" 유지.
+      //   (기본값으로 두면 saveNewVersion 이 status 를 "revised" 로 바꿔서 카드가
+      //    픽스 모음집에서 사라지는 사고가 발생함.)
+      await saveNewVersion(id, trimmed, name || null, "fixed");
       setEditingId(null);
       setEditText("");
       await load();

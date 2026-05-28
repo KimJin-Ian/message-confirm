@@ -71,7 +71,14 @@ export async function fetchVersions(messageId: string): Promise<MessageVersion[]
 export async function saveNewVersion(
   messageId: string,
   bodyText: string,
-  authorName: string | null
+  authorName: string | null,
+  /**
+   * 저장 후 messages.status 를 어떻게 둘지.
+   * - 기본 "revised" : 검토화면에서 수정한 케이스 — 다시 검토 흐름으로
+   * - "fixed"        : 픽스 모음집 인라인 편집 — 픽스 상태 유지 (카드 안 사라짐)
+   * - "keep"         : 상태 건드리지 않음 (current_version 만 갱신)
+   */
+  nextStatus: MessageStatus | "keep" = "revised"
 ): Promise<MessageVersion> {
   // 현재 최신 버전 번호 + 1
   const { data: latest } = await supabase
@@ -97,10 +104,9 @@ export async function saveNewVersion(
   if (error) throw error;
 
   // messages.current_version & status 갱신
-  await supabase
-    .from("messages")
-    .update({ current_version: nextVersion, status: "revised" })
-    .eq("id", messageId);
+  const patch: Record<string, unknown> = { current_version: nextVersion };
+  if (nextStatus !== "keep") patch.status = nextStatus;
+  await supabase.from("messages").update(patch).eq("id", messageId);
 
   return data as MessageVersion;
 }
