@@ -294,6 +294,28 @@ export default function ReviewScreen({
               contentEditable
               suppressContentEditableWarning
               spellCheck={false}
+              onPaste={(e) => {
+                // 복붙 시 원본 서식(검정 글자색·폰트 등) 제거하고 plain text만 삽입
+                e.preventDefault();
+                const text = e.clipboardData.getData("text/plain");
+                const selection = window.getSelection();
+                if (!selection || !selection.rangeCount) {
+                  // 선택 영역 없으면 끝에 추가
+                  if (editorRef.current) {
+                    editorRef.current.append(document.createTextNode(text));
+                  }
+                  return;
+                }
+                const range = selection.getRangeAt(0);
+                range.deleteContents();
+                const textNode = document.createTextNode(text);
+                range.insertNode(textNode);
+                // 캐럿을 삽입한 텍스트 끝으로 이동
+                range.setStartAfter(textNode);
+                range.setEndAfter(textNode);
+                selection.removeAllRanges();
+                selection.addRange(range);
+              }}
             />
 
             <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>

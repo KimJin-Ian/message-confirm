@@ -741,6 +741,18 @@ table.data tr:hover td {
   cursor: text;
   outline: none;
 }
+/* 복붙 시 원본 서식이 그대로 들어와도 어두운 배경에서 글자가 안 보이는 사고 방지 */
+.msg-version,
+.msg-version * {
+  color: #ffffff !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  font-family: inherit !important;
+}
+.msg-version {
+  /* 자기 자신은 그라데이션 배경 복원 */
+  background: linear-gradient(135deg, var(--navy-900) 0%, var(--navy-700) 100%) !important;
+}
 .msg-version::before {
   content: "📨 메시지 v" attr(data-version);
   position: absolute;
