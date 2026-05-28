@@ -184,6 +184,27 @@ export default function ReviewScreen({
   const decide = async (next: "fixed" | "excluded" | "feedback") => {
     setBusy(true);
     try {
+      // ✓ 픽스 / 더 수정 요청 누를 때 에디터에 미저장 변경이 있으면 자동으로 새 버전 저장.
+      //   → 모음집·재검토 시 항상 "내가 마지막으로 본 본문"이 보이도록 보장.
+      //   (excluded는 본문 저장 의미 없으므로 스킵.)
+      if (next !== "excluded") {
+        const editorText = (editorRef.current?.innerText ?? "").trim();
+        const baseText = (currentVersion?.body_text ?? "").trim();
+        if (editorText && editorText !== baseText) {
+          try {
+            await saveNewVersion(msg.id, editorText, name || null);
+          } catch (saveErr) {
+            // 저장이 실패하면 상태 변경도 중단 — 픽스했는데 옛날본이 박제되는 사고 방지
+            setError(
+              saveErr instanceof Error
+                ? `수정본 저장 실패: ${saveErr.message}`
+                : "수정본 저장 실패"
+            );
+            return;
+          }
+        }
+      }
+
       await updateMessageStatus(msg.id, next);
       setError(null);
       if (next === "fixed" || next === "excluded") {
@@ -462,8 +483,9 @@ export default function ReviewScreen({
             type="button"
             onClick={() => decide("fixed")}
             disabled={busy}
+            title="에디터 수정본을 자동 저장한 뒤 픽스 상태로 변경합니다."
           >
-            ✓ 픽스 (발송 OK)
+            ✓ 저장 + 픽스 (발송 OK)
           </button>
         </div>
       </div>
