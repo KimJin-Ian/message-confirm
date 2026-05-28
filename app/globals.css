@@ -1093,6 +1093,27 @@ table.data tr:hover td {
   overflow: hidden;
   margin-bottom: 10px;
 }
+/* 카드 펼침 — 전체 본문 인라인 표시 */
+.fixed-card.expanded {
+  border-left-width: 5px;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.12);
+  background: var(--green-50, #f0fdf4);
+}
+.fixed-card.expanded .preview.full {
+  display: block !important;
+  -webkit-line-clamp: unset !important;
+  overflow: visible !important;
+  background: white;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 12.5px;
+  color: var(--navy-900);
+  line-height: 1.75;
+  margin-bottom: 12px;
+  max-height: 60vh;
+  overflow-y: auto !important;
+}
 .fixed-card .foot {
   display: flex;
   justify-content: space-between;

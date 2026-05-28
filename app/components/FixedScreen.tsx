@@ -25,6 +25,8 @@ export default function FixedScreen({ onSelectMessage }: Props) {
   const [fieldFilter, setFieldFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<"recent" | "rank" | "score">("recent");
+  // 카드 클릭 시 인라인으로 전체 본문 펼치기 (검토화면으로 이동 X)
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const load = async () => {
     try {
@@ -228,59 +230,91 @@ export default function FixedScreen({ onSelectMessage }: Props) {
 
       {sorted.length > 0 && (
         <div className="fixed-grid">
-          {sorted.map((r) => (
-            <div
-              key={r.msg.id}
-              className="fixed-card"
-              onClick={() => onSelectMessage(r.msg.id)}
-            >
-              <div className="top">
-                <span className="id">
-                  #{r.msg.rank} · {r.msg.tail4}
-                </span>
-                <span className="field-pill">{r.msg.field}</span>
-              </div>
-              <h4>
-                {r.msg.name_guess || "선생님"} · {r.msg.period} ·{" "}
-                {r.msg.total_score?.toFixed(1)}점
-              </h4>
-              <div className="preview">
-                {r.preview.replace(/\n/g, " ").slice(0, 120)}...
-              </div>
-              <div className="foot">
-                <span>
-                  {r.msg.fixed_at
-                    ? new Date(r.msg.fixed_at).toLocaleString("ko-KR")
-                    : "—"}{" "}
-                  · v{r.msg.current_version}
-                </span>
-                <span style={{ display: "flex", gap: 4 }}>
-                  <span
-                    className="copy-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      copyBody(r.preview);
-                    }}
-                    role="button"
-                  >
-                    📋 복사
+          {sorted.map((r) => {
+            const isExpanded = expandedId === r.msg.id;
+            return (
+              <div
+                key={r.msg.id}
+                className={`fixed-card${isExpanded ? " expanded" : ""}`}
+                onClick={() => setExpandedId(isExpanded ? null : r.msg.id)}
+                title={isExpanded ? "다시 접기" : "전체 본문 펼쳐보기"}
+              >
+                <div className="top">
+                  <span className="id">
+                    #{r.msg.rank} · {r.msg.tail4}
                   </span>
-                  <span
-                    className="copy-btn"
-                    style={{ background: "var(--blue-600)", color: "white" }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      reactivate(r.msg.id);
+                  <span className="field-pill">{r.msg.field}</span>
+                </div>
+                <h4>
+                  {r.msg.name_guess || "선생님"} · {r.msg.period} ·{" "}
+                  {r.msg.total_score?.toFixed(1)}점
+                </h4>
+                {isExpanded ? (
+                  <div
+                    className="preview full"
+                    style={{
+                      whiteSpace: "pre-wrap",
+                      maxHeight: "none",
+                      WebkitLineClamp: "unset",
+                      display: "block",
                     }}
-                    role="button"
-                    title="다시 검토 대상으로 되돌리기"
                   >
-                    ↩ 검토로
+                    {r.preview || "(본문 없음)"}
+                  </div>
+                ) : (
+                  <div className="preview">
+                    {r.preview.replace(/\n/g, " ").slice(0, 120)}
+                    {r.preview.length > 120 ? "…" : ""}
+                  </div>
+                )}
+                <div className="foot">
+                  <span>
+                    {r.msg.fixed_at
+                      ? new Date(r.msg.fixed_at).toLocaleString("ko-KR")
+                      : "—"}{" "}
+                    · v{r.msg.current_version}
                   </span>
-                </span>
+                  <span style={{ display: "flex", gap: 4 }}>
+                    <span
+                      className="copy-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        copyBody(r.preview);
+                      }}
+                      role="button"
+                      title="본문 클립보드 복사"
+                    >
+                      📋 복사
+                    </span>
+                    <span
+                      className="copy-btn"
+                      style={{ background: "var(--gold-600)", color: "white" }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectMessage(r.msg.id);
+                      }}
+                      role="button"
+                      title="검토화면에서 다시 편집"
+                    >
+                      ✏️ 편집
+                    </span>
+                    <span
+                      className="copy-btn"
+                      style={{ background: "var(--blue-600)", color: "white" }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        reactivate(r.msg.id);
+                      }}
+                      role="button"
+                      title="다시 검토 대상(pending)으로 되돌리기"
+                    >
+                      ↩ 검토로
+                    </span>
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
