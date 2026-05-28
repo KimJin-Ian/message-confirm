@@ -136,8 +136,21 @@ export default function ReviewScreen({
 
   const currentVersion = versions[0];
 
+  // contentEditable + white-space:pre-wrap 조합에서 .innerText 가 <div> 블록 경계마다
+  // 추가 \n 을 끼워넣어 줄바꿈이 두 배로 부풀어 저장되는 문제 해결용 정규화.
+  //   - \r\n / \r 모두 \n 으로 통일 (윈도우/맥 클립보드 호환)
+  //   - 3개 이상 연속 \n 은 2개로 캡 (최대 한 줄 띄움 = 한 단락 구분만 허용)
+  //   - 각 줄 끝 공백 제거
+  const normalizeEditorText = (raw: string): string =>
+    raw
+      .replace(/\r\n?/g, "\n")
+      .split("\n")
+      .map((l) => l.replace(/[ \t]+$/g, ""))
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n");
+
   const saveCurrent = async () => {
-    const text = editorRef.current?.innerText ?? "";
+    const text = normalizeEditorText(editorRef.current?.innerText ?? "");
     if (!text.trim()) return;
     if (currentVersion && text === currentVersion.body_text) {
       setError("내용이 동일해서 새 버전으로 저장하지 않았습니다.");
@@ -188,7 +201,7 @@ export default function ReviewScreen({
       //   → 모음집·재검토 시 항상 "내가 마지막으로 본 본문"이 보이도록 보장.
       //   (excluded는 본문 저장 의미 없으므로 스킵.)
       if (next !== "excluded") {
-        const editorText = (editorRef.current?.innerText ?? "").trim();
+        const editorText = normalizeEditorText(editorRef.current?.innerText ?? "").trim();
         const baseText = (currentVersion?.body_text ?? "").trim();
         if (editorText && editorText !== baseText) {
           try {

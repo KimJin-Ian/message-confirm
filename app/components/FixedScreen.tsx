@@ -63,6 +63,11 @@ export default function FixedScreen({ onSelectMessage }: Props) {
     }
   };
 
+  // 과거 contentEditable 저장 시 부풀어 들어간 연속 \n 을 표시 시점에 정상화.
+  //   - \r\n / \r → \n 통일, 3개 이상 연속 \n → 2개로 캡
+  const normalizeForDisplay = (raw: string): string =>
+    raw.replace(/\r\n?/g, "\n").replace(/\n{3,}/g, "\n\n");
+
   const load = async () => {
     try {
       const all = await fetchAllMessages();
@@ -72,7 +77,7 @@ export default function FixedScreen({ onSelectMessage }: Props) {
         fixedOnly.map(async (m) => {
           try {
             const vs = await fetchVersions(m.id);
-            return { msg: m, preview: vs[0]?.body_text ?? "" };
+            return { msg: m, preview: normalizeForDisplay(vs[0]?.body_text ?? "") };
           } catch {
             return { msg: m, preview: "" };
           }
